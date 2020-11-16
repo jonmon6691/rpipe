@@ -82,6 +82,9 @@ aa('-n', '--nocheck',
    action='store_true',
    help='Don\'t check md5 at end (eg. crypto store')
 
+aa('--verify',
+   action='store_true',
+   help='with --replay, only checks the integrity of the given file')
 
 def mkname(n, width=6, prefix=''):
     C = string.ascii_lowercase
@@ -179,6 +182,9 @@ def check_pipe(remote):
         d = l.split()
         if len(d) < 2 or d[1] == 'TOTAL':
             continue
+        if d[1] not in remote_sums:
+            print("Chunk missing: {}/{}".format(remote, d[1]))
+            raise(IOError, "Chunk missing {}/{}".format(remote, d[1]))
         if remote_sums[d[1]] != d[0]:
             print("{} != {} [{}]".format(d[0], remote_sums[d[1]], d[1]))
             raise(Exception, 'Checksums do not match (current vs. saved)!')
@@ -293,8 +299,13 @@ def replay(args):
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    
-    if args.replay:
+
+    if args.verify:
+        try:
+            check_pipe(args.destination)
+        except:
+            exit(1)
+    elif args.replay:
         replay(args) 
     else:
         deposit(args)
