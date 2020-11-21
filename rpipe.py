@@ -1,19 +1,19 @@
 #!/usr/bin/env python
 #
 # MIT License
-# 
+#
 # Copyright (c) 2017 Eric A. Borisch
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
-# 
+#
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -59,38 +59,39 @@ aa = parser.add_argument
 aa('destination')
 
 aa('-c', '--chunksize',
-   type=int, default=2**23, 
-   help='Chunk size for splitting transfer [8MB]')
+    type=int, default=2**23,
+    help='Chunk size for splitting transfer [8MB]')
 
 aa('-b', '--blocksize',
-   type=int, default=2**16,
-   help='Block size for read/write [64KB]')
+    type=int, default=2**16,
+    help='Block size for read/write [64KB]')
 
 aa('-t', '--tempdir',
-   nargs=1, default='/tmp',
-   help='Directory for storing temporary files')
+    nargs=1, default='/tmp',
+    help='Directory for storing temporary files')
 
 aa('-r', '--replay',
-   action='store_true', 
-   help='Write previous saved stream to stdout')
+    action='store_true',
+    help='Write previous saved stream to stdout')
 
 aa('-j', '--jobs',
-   type=int, default=2, 
-   help='Number of simultaneous rclone jobs')
+    type=int, default=2,
+    help='Number of simultaneous rclone jobs')
 
 aa('-n', '--nocheck',
-   action='store_true',
-   help='Don\'t check md5 at end (eg. crypto store')
+    action='store_true',
+    help='Don\'t check md5 at end (eg. crypto store')
 
 aa('--verify',
-   action='store_true',
-   help='with --replay, only checks the integrity of the given file')
+    action='store_true',
+    help='with --replay, only checks the integrity of the given file')
 
 aa('--PAR',
-   action='store_true',
-   help='Create and upload PAR2 (parity archives) files alongside the chunks.')
+    action='store_true',
+    help='Create and upload PAR2 (parity archives) files alongside the chunks.')
 
 def mkname(n, width=6, prefix=''):
+""" Converts n into base-26 [a-z] """
     C = string.ascii_lowercase
     s = [C[0]] * width
     p = width - 1
@@ -102,11 +103,12 @@ def mkname(n, width=6, prefix=''):
         s[p] = C[n % 26]
         n /= 26
         p -= 1
-    
+
     return prefix + ''.join(s)
 
-
 def readin(f, blk, tot, csums):
+""" reads up to "tot" bytes from stdin into "f" in "blk" size chunks,
+returns bytes read """
     fout = open(f, 'w', blk)
     maxlen = tot
     while tot:
@@ -132,8 +134,8 @@ def upload(f, dst):
                            path.join(dst,path.basename(f))))
     return sp
 
-
 def cat(remote, fd=sys.stdout, bs=65536, csums=[], async=False):
+""" Streams a file from remote to 'fd' """
     sp = subprocess.Popen(('rclone',
                            'cat',
                            '--retries=10',
@@ -155,16 +157,23 @@ def cat(remote, fd=sys.stdout, bs=65536, csums=[], async=False):
     sp.wait()
     return len
 
-
 def complete(info, m):
+""" blocks on the rclone process to complete for the m'th chunk """
     if info[m][2]:
         info[m][2].wait()
         info[m][2] = None
         unlink(info[m][0])
 
-
 def check_pipe(remote):
-    remote_sums = {}
+""" Check the files on the remote
+Compares actual checksums of chunk files on remote to checksums
+for them stored in rpipe.md5 (also on remote) when the chunk was
+originally sent.
+
+Returns an open buffer to the rpipe.md5 file on success, raises
+an exception if integrity isn't verified
+ """
+    remote_sums = {} # Dict that maps filenames to checksums
 
     rmd5 = subprocess.check_output(('rclone',
                                     'md5sum',
@@ -173,7 +182,7 @@ def check_pipe(remote):
                                     remote))
     rmd5 = rmd5.split('\n')
     for l in rmd5:
-        d = l.split()
+        d = l.split() # (checksum, filename)
         if len(d) < 2:
             continue
         remote_sums[d[1]] = d[0]
@@ -183,7 +192,7 @@ def check_pipe(remote):
     buf.seek(0)
     md = {}
     for l in buf:
-        d = l.split()
+        d = l.split() # Tuples (checksum, filename)
         if len(d) < 2 or d[1] == 'TOTAL':
             continue
         if d[1] not in remote_sums:
@@ -194,19 +203,19 @@ def check_pipe(remote):
             raise(Exception, 'Checksums do not match (current vs. saved)!')
     return buf
 
-
 def deposit(args):
+""" Handle the whole transfer for sending """
     # Only output on stderr
     sys.stdout = sys.stderr
     subprocess.check_call(('rclone', 'mkdir', args.destination))
     n = 0
-    flist = []
-    b = 1
-    totsum = md5()
-    totsize = 0
-    while b > 0:
+    flist = [] # List of tuples: (chunk-filename, md5 object, subprocess object)
+    b = 1 # Bytes read from stdin
+    totsum = md5() # Checksup for the whole transfer
+    totsize = 0 # Accumulate bytes received on stdin
+    while b > 0: # Executes once per arg.chunksize of input on stdin
         flist.append([path.join(args.tempdir,mkname(n, prefix='rp-')),None,None])
-        csum = md5()
+        csum = md5() # Checksum for this chunk
         b = readin(flist[-1][0],
                    args.blocksize,
                    args.chunksize,
@@ -214,10 +223,10 @@ def deposit(args):
         if n >= args.jobs:
             complete(flist, n - args.jobs)
 
-        if b:
+        if b: # The chunk is non-zero in size
             totsize += b
-            flist[n][1] = csum.hexdigest()
-            flist[n][2] = upload(flist[-1][0], args.destination)
+            flist[n][1] = csum.hexdigest() # REPLACE md5 object with the final chunk digest
+            flist[n][2] = upload(flist[-1][0], args.destination) # Start the upload (returns a subprocess.Popen object)
             print('Sending chunk {} [{} bytes so far]'.format(n, totsize))
             if n == 0:
                 # Wait for first (for directory creation)
@@ -260,31 +269,33 @@ def replay(args):
         print('Success. Checksums match.', file=sys.stderr)
     else:
         buf = StringIO()
+        # We still open the rpipe.md5 file to check the total checksum
         cat(path.join(args.destination, 'rpipe.md5'), fd=buf)
     buf.seek(0)
     md = {}
+    # Create mapping of filename to checksum, also used to know the full list of chunks
     for l in buf:
         d = l.split()
         if not len(d):
             continue
         md[d[1]] = d[0]
 
-    n = 1
-    tsum = md5()
-    tsize = 0
+    n = 1 # Enumerate chunks for the the status message
+    tsum = md5() # Checksum for the total transfer
+    tsize = 0 # Accumulate total size
     for f in sorted(md.keys()):
         if f == 'TOTAL':
             continue
         print("Retrieving {}/{} [{} bytes total]".format(n, len(md)-1, tsize),
               file=sys.stderr)
         p = cat(path.join(args.destination, f), async=True)
-        csum = md5()
+        csum = md5() # Checksum for this chunk
         buf = (1,)
         while len(buf):
             buf = p.stdout.read(args.blocksize)
             if not len(buf):
-                continue
-            
+                continue # Will exit the while loop, could be a break... but honestly  do the following lines suffer from a zero-length buf?
+
             tsize += len(buf)
             csum.update(buf)
             tsum.update(buf)
@@ -310,7 +321,7 @@ if __name__ == "__main__":
         except:
             exit(1)
     elif args.replay:
-        replay(args) 
+        replay(args)
     else:
         deposit(args)
 
