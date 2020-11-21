@@ -157,12 +157,12 @@ def cat(remote, fd=sys.stdout, bs=65536, csums=[], async=False):
     sp.wait()
     return len
 
-def complete(info, m):
+def complete(flist, m):
 """ blocks on the rclone process to complete for the m'th chunk """
-    if info[m][2]:
-        info[m][2].wait()
-        info[m][2] = None
-        unlink(info[m][0])
+    if flist[m][2]:
+        flist[m][2].wait()
+        flist[m][2] = None
+        unlink(flist[m][0])
 
 def check_pipe(remote):
 """ Check the files on the remote
@@ -230,9 +230,7 @@ def deposit(args):
             print('Sending chunk {} [{} bytes so far]'.format(n, totsize))
             if n == 0:
                 # Wait for first (for directory creation)
-                flist[n][2].wait()
-                flist[n][2] = None
-                unlink(flist[n][0])
+                complete(flist, n)
             n+=1
         else:
             unlink(flist[-1][0])
