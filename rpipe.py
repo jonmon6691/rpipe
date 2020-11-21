@@ -86,7 +86,7 @@ aa('--verify',
     action='store_true',
     help='with --replay, only checks the integrity of the given file')
 
-aa('--PAR',
+aa('--parchive',
     action='store_true',
     help='Create and upload PAR2 (parity archives) files alongside the chunks.')
 
@@ -214,7 +214,8 @@ def deposit(args):
     totsum = md5() # Checksup for the whole transfer
     totsize = 0 # Accumulate bytes received on stdin
     while b > 0: # Executes once per arg.chunksize of input on stdin
-        flist.append([path.join(args.tempdir,mkname(n, prefix='rp-')),None,None])
+        chunk_id = mkname(n)
+        flist.append([path.join(args.tempdir, "rp-{}".format(chunk_id)), None, None])
         csum = md5() # Checksum for this chunk
         b = readin(flist[-1][0],
                    args.blocksize,
@@ -226,6 +227,24 @@ def deposit(args):
         if b: # The chunk is non-zero in size
             totsize += b
             flist[n][1] = csum.hexdigest() # REPLACE md5 object with the final chunk digest
+
+            if args.parchive:
+                # Create the parchive
+                subprocess.Popen(("par2", "create", "-q", "-q", "-n1", flist[n][0])).wait()
+
+                # The block file can also function as the index, so we'll delete the index
+                unlink("{}.par2".format(flist[n][0]))
+
+                # Rename the parchive block file
+                parchive_name = path.join(args.tempdir, "par-{}".format(chunk_id))
+                subprocess.Popen(("mv", "{}.vol000+100.par2".format(flist[n][0]), parchive_name)).wait()
+
+                # upload it
+                upload(parchive_name, args.destination).wait()
+
+                # Delete the temporary copy
+                unlink(parchive_name)
+
             flist[n][2] = upload(flist[-1][0], args.destination) # Start the upload (returns a subprocess.Popen object)
             print('Sending chunk {} [{} bytes so far]'.format(n, totsize))
             if n == 0:
