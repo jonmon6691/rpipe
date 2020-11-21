@@ -86,6 +86,10 @@ aa('--verify',
    action='store_true',
    help='with --replay, only checks the integrity of the given file')
 
+aa('--PAR',
+   action='store_true',
+   help='Create and upload PAR2 (parity archives) files alongside the chunks.')
+
 def mkname(n, width=6, prefix=''):
     C = string.ascii_lowercase
     s = [C[0]] * width
