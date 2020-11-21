@@ -91,7 +91,7 @@ aa('--PAR',
     help='Create and upload PAR2 (parity archives) files alongside the chunks.')
 
 def mkname(n, width=6, prefix=''):
-""" Converts n into base-26 [a-z] """
+    """ Converts n into base-26 [a-z] """
     C = string.ascii_lowercase
     s = [C[0]] * width
     p = width - 1
@@ -107,7 +107,7 @@ def mkname(n, width=6, prefix=''):
     return prefix + ''.join(s)
 
 def readin(f, blk, tot, csums):
-""" reads up to "tot" bytes from stdin into "f" in "blk" size chunks,
+    """ reads up to "tot" bytes from stdin into "f" in "blk" size chunks,
 returns bytes read """
     fout = open(f, 'w', blk)
     maxlen = tot
@@ -135,7 +135,7 @@ def upload(f, dst):
     return sp
 
 def cat(remote, fd=sys.stdout, bs=65536, csums=[], async=False):
-""" Streams a file from remote to 'fd' """
+    """ Streams a file from remote to 'fd' """
     sp = subprocess.Popen(('rclone',
                            'cat',
                            '--retries=10',
@@ -158,14 +158,14 @@ def cat(remote, fd=sys.stdout, bs=65536, csums=[], async=False):
     return len
 
 def complete(flist, m):
-""" blocks on the rclone process to complete for the m'th chunk """
+    """ blocks on the rclone process to complete for the m'th chunk """
     if flist[m][2]:
         flist[m][2].wait()
         flist[m][2] = None
         unlink(flist[m][0])
 
 def check_pipe(remote):
-""" Check the files on the remote
+    """ Check the files on the remote
 Compares actual checksums of chunk files on remote to checksums
 for them stored in rpipe.md5 (also on remote) when the chunk was
 originally sent.
@@ -204,7 +204,7 @@ an exception if integrity isn't verified
     return buf
 
 def deposit(args):
-""" Handle the whole transfer for sending """
+    """ Handle the whole transfer for sending """
     # Only output on stderr
     sys.stdout = sys.stderr
     subprocess.check_call(('rclone', 'mkdir', args.destination))
