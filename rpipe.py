@@ -90,6 +90,10 @@ aa('--parchive',
     action='store_true',
     help='Create and upload PAR2 (parity archives) files alongside the chunks.')
 
+aa('--repair',
+    action='store_true',
+    help='Whenever checksums don\'t match, look for a parchive and try and fix the chunk if there is one')
+
 def mkname(n, width=6, prefix=''):
     """ Converts n into base-26 [a-z] """
     C = string.ascii_lowercase
@@ -164,6 +168,9 @@ def complete(flist, m):
         flist[m][2] = None
         unlink(flist[m][0])
 
+class ChecksumError(Exception):
+    pass
+
 def check_pipe(remote):
     """ Check the files on the remote
 Compares actual checksums of chunk files on remote to checksums
@@ -191,23 +198,54 @@ an exception if integrity isn't verified
     cat(path.join(remote, 'rpipe.md5'), fd=buf)
     buf.seek(0)
     md = {}
+
     for l in buf: # Once per row in the rpipe.md5 file
         d = l.split() # Tuples (checksum, filename)
+
         if len(d) < 2 or d[1] == 'TOTAL':
             continue
+
         if d[1] not in remote_sums:
             print("Chunk missing: {}/{}".format(remote, d[1]))
-            raise(IOError, "Chunk missing {}/{}".format(remote, d[1]))
+            raise(ChecksumError, "Chunk missing {}/{}".format(remote, d[1]))
+
         if remote_sums[d[1]] != d[0]:
             chunk_id = d[1].split('-')[1]
-            
             # Get a list of files from the remote, check for corresponding par-xxxxxx file
             files = subprocess.check_output(('rclone', 'lsf', remote)).split('\n')
-            if "par-{}".format(chunk_id) in files:
-                print("{} failed checksum, but a parchive is available, run with --repair to try and repair")
+            par_name = "par-{}.par2".format(chunk_id)
+            if par_name in files:
+                if args.repair:
+                    print("Repairing {}...".format(d[1]))
+                    par_tmp = path.join(args.tempdir, par_name)
+                    
+                    # download par file
+                    subprocess.call(("rclone", "copy", path.join(remote, par_name), args.tempdir))
+                    
+                    # download rp- file
+                    rp_remote = path.join(remote, d[1])
+                    rp_tmp = path.join(args.tempdir, d[1])
+                    subprocess.call(("rclone", "copy", rp_remote, args.tempdir))
+
+                    # Repair
+                    ret = subprocess.call(("par2", "repair", "-q", "-a", par_tmp, rp_tmp))
+
+                    #todo:test the repair
+                    print("Repair returned {}".format(ret))
+
+                    # Copy the repaired chunk back onto the remote
+                    subprocess.call(("rclone", "copy", rp_tmp, remote))
+
+                    # Remove temporary files
+                    """
+                    unlink(par_tmp)
+                    unlink(rp_tmp)
+                    unlink("{}.1".format(rp_tmp))"""
+                else:
+                    print("{} failed checksum, but a parchive is available, run with --verify --repair to try and repair".format(d[1]))
 
             print("{} != {} [{}]".format(d[0], remote_sums[d[1]], d[1]))
-            raise(Exception, 'Checksums do not match (current vs. saved)!')
+            raise(ChecksumError, 'Checksums do not match (current vs. saved)!')
 
     return buf
 
@@ -243,8 +281,8 @@ def deposit(args):
                 # The block file can also function as the index, so we'll delete the index
                 unlink("{}.par2".format(flist[n][0]))
 
-                # Rename the parchive block file
-                parchive_name = path.join(args.tempdir, "par-{}".format(chunk_id))
+                # Rename the parchive block file, (.par2 extension is REQUIRED by par2 repair)
+                parchive_name = path.join(args.tempdir, "par-{}.par2".format(chunk_id))
                 subprocess.Popen(("mv", "{}.vol000+100.par2".format(flist[n][0]), parchive_name)).wait()
 
                 # upload it
@@ -343,7 +381,7 @@ if __name__ == "__main__":
     if args.verify:
         try:
             check_pipe(args.destination)
-        except:
+        except ChecksumError as e:
             exit(1)
     elif args.replay:
         replay(args)
