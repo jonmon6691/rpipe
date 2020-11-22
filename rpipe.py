@@ -191,7 +191,7 @@ an exception if integrity isn't verified
     cat(path.join(remote, 'rpipe.md5'), fd=buf)
     buf.seek(0)
     md = {}
-    for l in buf:
+    for l in buf: # Once per row in the rpipe.md5 file
         d = l.split() # Tuples (checksum, filename)
         if len(d) < 2 or d[1] == 'TOTAL':
             continue
@@ -199,8 +199,16 @@ an exception if integrity isn't verified
             print("Chunk missing: {}/{}".format(remote, d[1]))
             raise(IOError, "Chunk missing {}/{}".format(remote, d[1]))
         if remote_sums[d[1]] != d[0]:
+            chunk_id = d[1].split('-')[1]
+            
+            # Get a list of files from the remote, check for corresponding par-xxxxxx file
+            files = subprocess.check_output(('rclone', 'lsf', remote)).split('\n')
+            if "par-{}".format(chunk_id) in files:
+                print("{} failed checksum, but a parchive is available, run with --repair to try and repair")
+
             print("{} != {} [{}]".format(d[0], remote_sums[d[1]], d[1]))
             raise(Exception, 'Checksums do not match (current vs. saved)!')
+
     return buf
 
 def deposit(args):
