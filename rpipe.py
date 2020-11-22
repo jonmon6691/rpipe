@@ -30,7 +30,7 @@ import sys
 import string
 
 from hashlib import md5
-from os import path,fsync,unlink
+from os import path,fsync,unlink,devnull
 from StringIO import StringIO
 
 epi="""
@@ -199,7 +199,7 @@ an exception if integrity isn't verified
     buf.seek(0)
     md = {}
 
-    for l in buf: # Once per row in the rpipe.md5 file
+    for chunk_num, l in enumerate(buf): # Once per row in the rpipe.md5 file
         d = l.split() # Tuples (checksum, filename)
 
         if len(d) < 2 or d[1] == 'TOTAL':
@@ -216,31 +216,37 @@ an exception if integrity isn't verified
             par_name = "par-{}.par2".format(chunk_id)
             if par_name in files:
                 if args.repair:
-                    print("Repairing {}...".format(d[1]))
+                    dev_null = open(devnull, "w")
+                    print("Repairing chunk {}... ".format(chunk_num), file=sys.stderr, end='')
                     
                     # download par file
-                    subprocess.call(("rclone", "copy", path.join(remote, par_name), args.tempdir))
+                    subprocess.call(("rclone", "copy", path.join(remote, par_name), args.tempdir), stdout=dev_null)
                     
                     # download rp- file
                     rp_remote = path.join(remote, d[1])
-                    subprocess.call(("rclone", "copy", rp_remote, args.tempdir))
+                    subprocess.call(("rclone", "copy", rp_remote, args.tempdir), stdout=dev_null)
 
                     # Repair
                     par_tmp = path.join(args.tempdir, par_name)
                     rp_tmp = path.join(args.tempdir, d[1])
-                    ret = subprocess.call(("par2", "repair", "-q", "-a", par_tmp, rp_tmp))
+                    ret = subprocess.call(("par2", "repair", "-q", "-a", par_tmp, rp_tmp), stdout=dev_null)
 
                     if ret == 0: # Repair returns 0 on success
                         # Copy the repaired chunk back onto the remote
-                        subprocess.call(("rclone", "copy", rp_tmp, remote))
+                        subprocess.call(("rclone", "copy", rp_tmp, remote), stdout=dev_null)
+                        print("Done.", file=sys.stderr)
+                    else:
+                        raise ChecksumError("Couldn't repair remote data, use --nocheck to allow the data to be piped anyway.")
 
                     # Remove temporary files
+                    dev_null.close()
                     unlink(par_tmp)
                     unlink(rp_tmp)
                     unlink("{}.1".format(rp_tmp))
-                else:
-                    print("{} failed checksum, but a parchive is available, run with --verify --repair to try and repair".format(d[1]))
-                    raise(ChecksumError, 'Checksums do not match (current vs. saved)!')
+                else: # --repair flag was not set
+                    raise ChecksumError("ERROR: Checksum failed\nHOPE: parity file found, run again with --repair to try and repair".format(d[1]))
+            else: # no par file found
+                raise ChecksumError('Checksums do not match, use --nocheck to allow the data to be piped anyway')
 
     return buf
 
@@ -271,14 +277,14 @@ def deposit(args):
 
             if args.parchive:
                 # Create the parchive
-                subprocess.Popen(("par2", "create", "-q", "-q", "-n1", flist[n][0])).wait()
+                subprocess.call(("par2", "create", "-q", "-q", "-n1", flist[n][0]))
 
                 # The block file can also function as the index, so we'll delete the index
                 unlink("{}.par2".format(flist[n][0]))
 
                 # Rename the parchive block file, (.par2 extension is REQUIRED by par2 repair)
                 parchive_name = path.join(args.tempdir, "par-{}.par2".format(chunk_id))
-                subprocess.Popen(("mv", "{}.vol000+100.par2".format(flist[n][0]), parchive_name)).wait()
+                subprocess.call(("mv", "{}.vol000+100.par2".format(flist[n][0]), parchive_name))
 
                 # upload it
                 upload(parchive_name, args.destination).wait()
@@ -373,13 +379,14 @@ def replay(args):
 if __name__ == "__main__":
     args = parser.parse_args()
 
-    if args.verify:
-        try:
+    try:
+        if args.verify:
             check_pipe(args.destination)
-        except ChecksumError as e:
-            exit(1)
-    elif args.replay:
-        replay(args)
-    else:
-        deposit(args)
+        elif args.replay:
+            replay(args)
+        else:
+            deposit(args)
+    except ChecksumError as e:
+        print(e, file=sys.stderr)
+        exit(1)
 
