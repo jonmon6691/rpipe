@@ -217,35 +217,30 @@ an exception if integrity isn't verified
             if par_name in files:
                 if args.repair:
                     print("Repairing {}...".format(d[1]))
-                    par_tmp = path.join(args.tempdir, par_name)
                     
                     # download par file
                     subprocess.call(("rclone", "copy", path.join(remote, par_name), args.tempdir))
                     
                     # download rp- file
                     rp_remote = path.join(remote, d[1])
-                    rp_tmp = path.join(args.tempdir, d[1])
                     subprocess.call(("rclone", "copy", rp_remote, args.tempdir))
 
                     # Repair
+                    par_tmp = path.join(args.tempdir, par_name)
+                    rp_tmp = path.join(args.tempdir, d[1])
                     ret = subprocess.call(("par2", "repair", "-q", "-a", par_tmp, rp_tmp))
 
-                    #todo:test the repair
-                    print("Repair returned {}".format(ret))
-
-                    # Copy the repaired chunk back onto the remote
-                    subprocess.call(("rclone", "copy", rp_tmp, remote))
+                    if ret == 0: # Repair returns 0 on success
+                        # Copy the repaired chunk back onto the remote
+                        subprocess.call(("rclone", "copy", rp_tmp, remote))
 
                     # Remove temporary files
-                    """
                     unlink(par_tmp)
                     unlink(rp_tmp)
-                    unlink("{}.1".format(rp_tmp))"""
+                    unlink("{}.1".format(rp_tmp))
                 else:
                     print("{} failed checksum, but a parchive is available, run with --verify --repair to try and repair".format(d[1]))
-
-            print("{} != {} [{}]".format(d[0], remote_sums[d[1]], d[1]))
-            raise(ChecksumError, 'Checksums do not match (current vs. saved)!')
+                    raise(ChecksumError, 'Checksums do not match (current vs. saved)!')
 
     return buf
 
