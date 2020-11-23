@@ -1,4 +1,5 @@
 # rpipe
+```
 Tool for reading from stdin and writing to rclone storage.
 
 usage: rpipe.py [-h] [-c CHUNKSIZE] [-b BLOCKSIZE] [-t TEMPDIR] [-r] [-j JOBS]
@@ -47,3 +48,5 @@ Examples:
                       encrypted store...
     rpipe.py --replay remote:some/empty/loc | <some sink>
     rpipe.py --replay --nocheck crypt:an/encrypted/loc | <some sink>
+
+```
