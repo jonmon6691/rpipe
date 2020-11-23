@@ -31,6 +31,9 @@ import string
 
 from hashlib import md5
 from os import path,fsync,unlink,devnull
+from tempfile import mkdtemp
+from shutil import rmtree
+from glob import glob
 from StringIO import StringIO
 
 epi="""
@@ -67,7 +70,7 @@ aa('-b', '--blocksize',
     help='Block size for read/write [64KB]')
 
 aa('-t', '--tempdir',
-    nargs=1, default='/tmp',
+    nargs=1, default=None,
     help='Directory for storing temporary files')
 
 aa('-r', '--replay',
@@ -296,7 +299,9 @@ def deposit(args):
 
                 # Rename the parchive block file, (.par2 extension is REQUIRED by par2 repair)
                 parchive_name = path.join(args.tempdir, "par-{}.par2".format(chunk_id))
-                subprocess.call(("mv", "{}.vol000+100.par2".format(flist[n][0]), parchive_name))
+                par_file = glob("{}.vol*.par2".format(flist[n][0]))
+                assert len(par_file) == 1, "There can be only one!"
+                subprocess.call(("mv", par_file[0], parchive_name))
 
                 # upload it
                 upload(parchive_name, args.destination).wait()
@@ -390,6 +395,12 @@ def replay(args):
 
 if __name__ == "__main__":
     args = parser.parse_args()
+    ret = 0
+
+    rmtemp = False
+    if args.tempdir is None:
+        args.tempdir = mkdtemp(prefix='rpipe-')
+        rmtemp = True
 
     try:
         if args.verify:
@@ -400,5 +411,9 @@ if __name__ == "__main__":
             deposit(args)
     except ChecksumError as e:
         print(e, file=sys.stderr)
-        exit(1)
+        ret = 1
+    finally:
+        if rmtemp:
+            rmtree(args.tempdir)
+        exit(ret)
 
