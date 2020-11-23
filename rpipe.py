@@ -94,6 +94,7 @@ aa('--repair',
     action='store_true',
     help='Whenever checksums don\'t match, look for a parity file and try and fix the data on the remote')
 
+
 def mkname(n, width=6, prefix=''):
     """ Converts n into base-26 [a-z] """
     C = string.ascii_lowercase
@@ -110,9 +111,10 @@ def mkname(n, width=6, prefix=''):
 
     return prefix + ''.join(s)
 
+
 def readin(f, blk, tot, csums):
     """ reads up to "tot" bytes from stdin into "f" in "blk" size chunks,
-returns bytes read """
+        returns number of bytes read """
     fout = open(f, 'w', blk)
     maxlen = tot
     while tot:
@@ -138,6 +140,7 @@ def upload(f, dst):
                            path.join(dst,path.basename(f))))
     return sp
 
+
 def cat(remote, fd=sys.stdout, bs=65536, csums=[], async=False):
     """ Streams a file from remote to 'fd' """
     sp = subprocess.Popen(('rclone',
@@ -161,6 +164,7 @@ def cat(remote, fd=sys.stdout, bs=65536, csums=[], async=False):
     sp.wait()
     return len
 
+
 def complete(flist, m):
     """ blocks on the rclone process to complete for the m'th chunk """
     if flist[m][2]:
@@ -168,18 +172,24 @@ def complete(flist, m):
         flist[m][2] = None
         unlink(flist[m][0])
 
+
 class ChecksumError(Exception):
     pass
 
+
 def check_pipe(remote):
     """ Check the files on the remote
-Compares actual checksums of chunk files on remote to checksums
-for them stored in rpipe.md5 (also on remote) when the chunk was
-originally sent.
+    Compares actual checksums of chunk files on remote to checksums
+    for them stored in rpipe.md5 (also on remote) when the chunk was
+    originally sent.
 
-Returns an open buffer to the rpipe.md5 file on success, raises
-an exception if integrity isn't verified
- """
+    If the --repair flag is set, then this function will also try
+    to repair and files with bad checksums if it can find a par2
+    file on the remote.
+
+    Returns an open buffer to the rpipe.md5 file on success, raises
+    an exception if integrity isn't verified
+     """
     remote_sums = {} # Dict that maps filenames to checksums
 
     rmd5 = subprocess.check_output(('rclone',
@@ -211,6 +221,7 @@ an exception if integrity isn't verified
 
         if remote_sums[d[1]] != d[0]:
             chunk_id = d[1].split('-')[1]
+
             # Get a list of files from the remote, check for corresponding par-xxxxxx file
             files = subprocess.check_output(('rclone', 'lsf', remote)).split('\n')
             par_name = "par-{}.par2".format(chunk_id)
@@ -245,10 +256,11 @@ an exception if integrity isn't verified
                     unlink("{}.1".format(rp_tmp))
                 else: # --repair flag was not set
                     raise ChecksumError("ERROR: Checksum failed\nHOPE: parity file found, run again with --repair to try and repair".format(d[1]))
+
             else: # no par file found
                 raise ChecksumError('Checksums do not match, use --nocheck to allow the data to be piped anyway')
-
     return buf
+
 
 def deposit(args):
     """ Handle the whole transfer for sending """
