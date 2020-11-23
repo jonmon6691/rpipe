@@ -36,7 +36,7 @@ from StringIO import StringIO
 epi="""
 Works by creating temporary files of size --chunksize in --tempdir, and
 uploading those. By default runs two 'jobs', such that an upload can be
-occuring while the next chunk is being built. As such, tempdir needs to
+occurring while the next chunk is being built. As such, tempdir needs to
 be able to hold two chunks. They are deleted and checksum-ed along the
 way, and verified during retrieval.
 
@@ -49,7 +49,7 @@ Examples:
                     ^ As we can't check the md5s of the deposited files on an
                       encrypted store...
     rpipe.py --replay remote:some/empty/loc | <some sink>
-    rpipe.py --replay --nocheck crypt:an/ecrypted/loc | <some sink>
+    rpipe.py --replay --nocheck crypt:an/encrypted/loc | <some sink>
 """
 
 parser = argparse.ArgumentParser(description=
@@ -80,19 +80,19 @@ aa('-j', '--jobs',
 
 aa('-n', '--nocheck',
     action='store_true',
-    help='Don\'t check md5 at end (eg. crypto store')
+    help='Don\'t check md5 at end (eg. crypto store)')
 
 aa('--verify',
     action='store_true',
-    help='with --replay, only checks the integrity of the given file')
+    help='Only check the integrity of the given remote by verifying checksums. Doesn\'t work with --nocheck. Returns 0 if checksums match, 1 if there is a problem')
 
 aa('--parchive',
     action='store_true',
-    help='Create and upload PAR2 (parity archives) files alongside the chunks.')
+    help='Create and upload PAR2 files (parity archives) alongside the chunks. The parity file can repair damage up to 5%% of the total size of the file. Excellent protection against bitrot.')
 
 aa('--repair',
     action='store_true',
-    help='Whenever checksums don\'t match, look for a parchive and try and fix the chunk if there is one')
+    help='Whenever checksums don\'t match, look for a parity file and try and fix the data on the remote')
 
 def mkname(n, width=6, prefix=''):
     """ Converts n into base-26 [a-z] """
@@ -258,7 +258,7 @@ def deposit(args):
     n = 0
     flist = [] # List of tuples: (chunk-filename, md5 object, subprocess object)
     b = 1 # Bytes read from stdin
-    totsum = md5() # Checksup for the whole transfer
+    totsum = md5() # Checksum for the whole transfer
     totsize = 0 # Accumulate bytes received on stdin
     while b > 0: # Executes once per arg.chunksize of input on stdin
         chunk_id = mkname(n)
@@ -344,7 +344,7 @@ def replay(args):
             continue
         md[d[1]] = d[0]
 
-    n = 1 # Enumerate chunks for the the status message
+    n = 1 # Enumerate chunks for the status message
     tsum = md5() # Checksum for the total transfer
     tsize = 0 # Accumulate total size
     for f in sorted(md.keys()):
