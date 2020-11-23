@@ -1,7 +1,6 @@
 # rpipe
-```
 Tool for reading from stdin and writing to rclone storage.
-
+```
 usage: rpipe.py [-h] [-c CHUNKSIZE] [-b BLOCKSIZE] [-t TEMPDIR] [-r] [-j JOBS]
                 [-n] [--verify] [--parchive] [--repair]
                 destination
